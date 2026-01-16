@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>시스템 리소스 모니터</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <h1>🖥️ 시스템 리소스 모니터</h1>
+        <div class="header-info">
+          <span id="system-name">Loading...</span>
+          <span class="live-indicator">
+            <span class="pulse"></span>
+            LIVE
+          </span>
+        </div>
+      </div>
+      <div class="tracking-controls">
+        <button id="start-tracking" class="btn btn-primary">
+          <span>📊</span> 5분 추적 시작
+        </button>
+        <div id="tracking-status" class="tracking-status hidden">
+          <span class="tracking-icon">⏱️</span>
+          <span id="tracking-time">00:00</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Grid -->
+    <main class="dashboard-grid">
+      <!-- CPU Card -->
+      <section class="card cpu-card">
+        <div class="card-header">
+          <h2>⚡ CPU</h2>
+          <span id="cpu-temp" class="badge">-- °C</span>
+        </div>
+        <div class="card-body">
+          <div class="gauge-container">
+            <div class="gauge">
+              <svg viewBox="0 0 100 50">
+                <path class="gauge-bg" d="M 10 50 A 40 40 0 0 1 90 50" />
+                <path id="cpu-gauge" class="gauge-fill" d="M 10 50 A 40 40 0 0 1 90 50" />
+              </svg>
+              <div class="gauge-value">
+                <span id="cpu-load">0</span>%
+              </div>
+            </div>
+          </div>
+          <div class="chart-container">
+            <canvas id="cpu-chart"></canvas>
+          </div>
+          <div class="cpu-cores" id="cpu-cores"></div>
+        </div>
+      </section>
+
+      <!-- Memory Card -->
+      <section class="card memory-card">
+        <div class="card-header">
+          <h2>💾 메모리</h2>
+          <span id="mem-used-badge" class="badge">-- GB</span>
+        </div>
+        <div class="card-body">
+          <div class="memory-bar-container">
+            <div class="memory-bar">
+              <div id="memory-bar-fill" class="memory-bar-fill"></div>
+            </div>
+            <div class="memory-labels">
+              <span id="mem-used-label">0 GB</span>
+              <span id="mem-total-label">0 GB</span>
+            </div>
+          </div>
+          <div class="chart-container">
+            <canvas id="memory-chart"></canvas>
+          </div>
+          <div class="memory-details">
+            <div class="detail-item">
+              <span class="label">Active</span>
+              <span id="mem-active" class="value">--</span>
+            </div>
+            <div class="detail-item">
+              <span class="label">Available</span>
+              <span id="mem-available" class="value">--</span>
+            </div>
+            <div class="detail-item">
+              <span class="label">Swap Used</span>
+              <span id="mem-swap" class="value">--</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- GPU Card -->
+      <section class="card gpu-card">
+        <div class="card-header">
+          <h2>🎮 GPU</h2>
+          <span id="gpu-temp" class="badge">-- °C</span>
+        </div>
+        <div class="card-body">
+          <div id="gpu-info" class="gpu-info">
+            <p class="loading">GPU 정보 로딩중...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Network Card -->
+      <section class="card network-card">
+        <div class="card-header">
+          <h2>🌐 네트워크</h2>
+        </div>
+        <div class="card-body">
+          <div class="network-stats">
+            <div class="stat-box download">
+              <span class="stat-icon">⬇️</span>
+              <div class="stat-content">
+                <span class="stat-label">Download</span>
+                <span id="net-download" class="stat-value">0 KB/s</span>
+              </div>
+            </div>
+            <div class="stat-box upload">
+              <span class="stat-icon">⬆️</span>
+              <div class="stat-content">
+                <span class="stat-label">Upload</span>
+                <span id="net-upload" class="stat-value">0 KB/s</span>
+              </div>
+            </div>
+          </div>
+          <div class="chart-container">
+            <canvas id="network-chart"></canvas>
+          </div>
+          <div class="network-total">
+            <span>Total: <span id="net-total-rx">0</span> ⬇️ / <span id="net-total-tx">0</span> ⬆️</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Disk Card -->
+      <section class="card disk-card">
+        <div class="card-header">
+          <h2>💿 디스크</h2>
+        </div>
+        <div class="card-body">
+          <div class="disk-charts-container">
+            <div class="disk-chart-wrapper">
+              <canvas id="disk-chart"></canvas>
+            </div>
+            <div id="disk-legend" class="disk-legend"></div>
+          </div>
+          <div class="disk-io">
+            <div class="io-stat">
+              <span class="io-label">Read</span>
+              <span id="disk-read" class="io-value">0 KB/s</span>
+            </div>
+            <div class="io-stat">
+              <span class="io-label">Write</span>
+              <span id="disk-write" class="io-value">0 KB/s</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Processes Card -->
+      <section class="card processes-card">
+        <div class="card-header">
+          <h2>📋 상위 프로세스</h2>
+        </div>
+        <div class="card-body">
+          <div class="table-container">
+            <table class="processes-table">
+              <thead>
+                <tr>
+                  <th>이름</th>
+                  <th>PID</th>
+                  <th>CPU %</th>
+                  <th>MEM %</th>
+                </tr>
+              </thead>
+              <tbody id="processes-body">
+                <tr><td colspan="4" class="loading">로딩중...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- System Info Card -->
+      <section class="card system-info-card">
+        <div class="card-header">
+          <h2>ℹ️ 시스템 정보</h2>
+        </div>
+        <div class="card-body">
+          <div id="system-info" class="system-info-content">
+            <p class="loading">시스템 정보 로딩중...</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <span id="last-updated">마지막 업데이트: --</span>
+    </footer>
+  </div>
+
+  <script src="js/charts.js"></script>
+  <script src="js/pdf-report.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -63,6 +63,8 @@ function init() {
     // Socket event listeners
     socket.on('connect', () => {
         console.log('Connected to server');
+        elements.lastUpdated.style.color = '';
+        elements.lastUpdated.textContent = `마지막 업데이트: ${new Date().toLocaleTimeString('ko-KR')}`;
     });
 
     socket.on('systemInfo', (info) => {
@@ -80,8 +82,17 @@ function init() {
         }
     });
 
+    socket.on('metricsError', (error) => {
+        console.error('Metrics error from server:', error);
+        // Show error to user
+        elements.lastUpdated.textContent = `⚠️ 에러: ${error.message}`;
+        elements.lastUpdated.style.color = '#ef4444';
+    });
+
     socket.on('disconnect', () => {
         console.log('Disconnected from server');
+        elements.lastUpdated.textContent = '❌ 서버와의 연결 끊김';
+        elements.lastUpdated.style.color = '#ef4444';
     });
 }
 
@@ -89,43 +100,58 @@ function init() {
 function updateSystemInfo(info) {
     elements.systemName.textContent = `${info.system?.manufacturer || ''} ${info.system?.model || 'Unknown System'}`;
 
-    let html = '';
+    // Clear previous content
+    elements.systemInfo.innerHTML = '';
 
     if (info.os) {
-        html += `
-      <div class="info-row">
-        <span class="label">호스트</span>
-        <span class="value">${info.os.hostname || 'N/A'}</span>
-      </div>
-      <div class="info-row">
-        <span class="label">OS</span>
-        <span class="value">${info.os.distro || 'N/A'}</span>
-      </div>
-      <div class="info-row">
-        <span class="label">버전</span>
-        <span class="value">${info.os.release || 'N/A'}</span>
-      </div>
-      <div class="info-row">
-        <span class="label">아키텍처</span>
-        <span class="value">${info.os.arch || 'N/A'}</span>
-      </div>
-    `;
+        const infoRows = [
+            { label: '호스트', value: info.os.hostname || 'N/A' },
+            { label: 'OS', value: info.os.distro || 'N/A' },
+            { label: '버전', value: info.os.release || 'N/A' },
+            { label: '아키텍처', value: info.os.arch || 'N/A' }
+        ];
+
+        infoRows.forEach(row => {
+            const infoRow = document.createElement('div');
+            infoRow.className = 'info-row';
+
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'label';
+            labelSpan.textContent = row.label;
+
+            const valueSpan = document.createElement('span');
+            valueSpan.className = 'value';
+            valueSpan.textContent = row.value;
+
+            infoRow.appendChild(labelSpan);
+            infoRow.appendChild(valueSpan);
+            elements.systemInfo.appendChild(infoRow);
+        });
     }
 
     if (info.cpu) {
-        html += `
-      <div class="info-row">
-        <span class="label">CPU</span>
-        <span class="value">${info.cpu.brand || 'N/A'}</span>
-      </div>
-      <div class="info-row">
-        <span class="label">코어</span>
-        <span class="value">${info.cpu.physicalCores || 0} Physical / ${info.cpu.cores || 0} Logical</span>
-      </div>
-    `;
-    }
+        const cpuRows = [
+            { label: 'CPU', value: info.cpu.brand || 'N/A' },
+            { label: '코어', value: `${info.cpu.physicalCores || 0} Physical / ${info.cpu.cores || 0} Logical` }
+        ];
 
-    elements.systemInfo.innerHTML = html;
+        cpuRows.forEach(row => {
+            const infoRow = document.createElement('div');
+            infoRow.className = 'info-row';
+
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'label';
+            labelSpan.textContent = row.label;
+
+            const valueSpan = document.createElement('span');
+            valueSpan.className = 'value';
+            valueSpan.textContent = row.value;
+
+            infoRow.appendChild(labelSpan);
+            infoRow.appendChild(valueSpan);
+            elements.systemInfo.appendChild(infoRow);
+        });
+    }
 }
 
 // Update UI with new metrics
@@ -172,16 +198,24 @@ function updateCPU(cpu) {
 
     // Update cores
     if (cpu.cores && cpu.cores.length > 0) {
-        let coresHtml = '';
+        elements.cpuCores.innerHTML = ''; // Clear previous
         cpu.cores.forEach(core => {
-            coresHtml += `
-        <div class="core-item">
-          <span class="core-num">Core ${core.core}</span>
-          <span class="core-load" style="color: ${getColorForValue(parseFloat(core.load))}">${core.load}%</span>
-        </div>
-      `;
+            const coreItem = document.createElement('div');
+            coreItem.className = 'core-item';
+
+            const coreNum = document.createElement('span');
+            coreNum.className = 'core-num';
+            coreNum.textContent = `Core ${core.core}`;
+
+            const coreLoad = document.createElement('span');
+            coreLoad.className = 'core-load';
+            coreLoad.style.color = getColorForValue(parseFloat(core.load));
+            coreLoad.textContent = `${core.load}%`;
+
+            coreItem.appendChild(coreNum);
+            coreItem.appendChild(coreLoad);
+            elements.cpuCores.appendChild(coreItem);
         });
-        elements.cpuCores.innerHTML = coresHtml;
     }
 }
 
@@ -203,40 +237,54 @@ function updateMemory(mem) {
 
 // Update GPU display
 function updateGPU(gpuList) {
+    elements.gpuInfo.innerHTML = ''; // Clear previous
+
     if (!gpuList || gpuList.length === 0) {
-        elements.gpuInfo.innerHTML = '<p class="loading">GPU 정보 없음</p>';
+        const noGpu = document.createElement('p');
+        noGpu.className = 'loading';
+        noGpu.textContent = 'GPU 정보 없음';
+        elements.gpuInfo.appendChild(noGpu);
         return;
     }
 
-    let html = '';
+    gpuList.forEach((gpu) => {
+        const gpuItem = document.createElement('div');
+        gpuItem.className = 'gpu-item';
 
-    gpuList.forEach((gpu, index) => {
-        html += `
-      <div class="gpu-item">
-        <h3>${gpu.vendor} ${gpu.model}</h3>
-        <div class="gpu-stats">
-          <div class="gpu-stat">
-            <span class="stat-label">VRAM</span>
-            <span class="stat-value">${gpu.vram ? gpu.vram + ' MB' : 'N/A'}</span>
-          </div>
-          <div class="gpu-stat">
-            <span class="stat-label">온도</span>
-            <span class="stat-value">${gpu.temperatureGpu ? gpu.temperatureGpu + '°C' : 'N/A'}</span>
-          </div>
-          <div class="gpu-stat">
-            <span class="stat-label">사용률</span>
-            <span class="stat-value">${gpu.utilizationGpu ? gpu.utilizationGpu + '%' : 'N/A'}</span>
-          </div>
-          <div class="gpu-stat">
-            <span class="stat-label">메모리 사용</span>
-            <span class="stat-value">${gpu.memoryUsed ? formatBytes(gpu.memoryUsed * 1024 * 1024) : 'N/A'}</span>
-          </div>
-        </div>
-      </div>
-    `;
+        const title = document.createElement('h3');
+        title.textContent = `${gpu.vendor} ${gpu.model}`;
+
+        const statsDiv = document.createElement('div');
+        statsDiv.className = 'gpu-stats';
+
+        const stats = [
+            { label: 'VRAM', value: gpu.vram ? gpu.vram + ' MB' : 'N/A' },
+            { label: '온도', value: gpu.temperatureGpu ? gpu.temperatureGpu + '°C' : 'N/A' },
+            { label: '사용률', value: gpu.utilizationGpu ? gpu.utilizationGpu + '%' : 'N/A' },
+            { label: '메모리 사용', value: gpu.memoryUsed ? formatBytes(gpu.memoryUsed * 1024 * 1024) : 'N/A' }
+        ];
+
+        stats.forEach(stat => {
+            const statDiv = document.createElement('div');
+            statDiv.className = 'gpu-stat';
+
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'stat-label';
+            labelSpan.textContent = stat.label;
+
+            const valueSpan = document.createElement('span');
+            valueSpan.className = 'stat-value';
+            valueSpan.textContent = stat.value;
+
+            statDiv.appendChild(labelSpan);
+            statDiv.appendChild(valueSpan);
+            statsDiv.appendChild(statDiv);
+        });
+
+        gpuItem.appendChild(title);
+        gpuItem.appendChild(statsDiv);
+        elements.gpuInfo.appendChild(gpuItem);
     });
-
-    elements.gpuInfo.innerHTML = html;
 
     // Update GPU temp badge
     if (gpuList[0].temperatureGpu) {
@@ -270,24 +318,44 @@ function updateDiskIO(diskIO) {
 
 // Update Processes table
 function updateProcesses(processes) {
+    elements.processesBody.innerHTML = ''; // Clear previous
+
     if (!processes || processes.length === 0) {
-        elements.processesBody.innerHTML = '<tr><td colspan="4" class="loading">프로세스 정보 없음</td></tr>';
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 4;
+        td.className = 'loading';
+        td.textContent = '프로세스 정보 없음';
+        tr.appendChild(td);
+        elements.processesBody.appendChild(tr);
         return;
     }
 
-    let html = '';
     processes.forEach(proc => {
-        html += `
-      <tr>
-        <td class="proc-name" title="${proc.name}">${proc.name}</td>
-        <td>${proc.pid}</td>
-        <td class="proc-cpu">${proc.cpu}%</td>
-        <td class="proc-mem">${proc.mem}%</td>
-      </tr>
-    `;
-    });
+        const tr = document.createElement('tr');
 
-    elements.processesBody.innerHTML = html;
+        const nameCell = document.createElement('td');
+        nameCell.className = 'proc-name';
+        nameCell.title = proc.name;
+        nameCell.textContent = proc.name;
+
+        const pidCell = document.createElement('td');
+        pidCell.textContent = proc.pid;
+
+        const cpuCell = document.createElement('td');
+        cpuCell.className = 'proc-cpu';
+        cpuCell.textContent = `${proc.cpu}%`;
+
+        const memCell = document.createElement('td');
+        memCell.className = 'proc-mem';
+        memCell.textContent = `${proc.mem}%`;
+
+        tr.appendChild(nameCell);
+        tr.appendChild(pidCell);
+        tr.appendChild(cpuCell);
+        tr.appendChild(memCell);
+        elements.processesBody.appendChild(tr);
+    });
 }
 
 // Utility functions

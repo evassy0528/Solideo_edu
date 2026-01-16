@@ -171,24 +171,58 @@ async function collectMetrics() {
   }
 }
 
+// Global metrics collection to avoid memory leak
+let metricsInterval = null;
+const connectedClients = new Set();
+
+function startMetricsCollection() {
+  if (metricsInterval) return; // Already running
+
+  metricsInterval = setInterval(async () => {
+    try {
+      const metrics = await collectMetrics();
+      if (metrics && connectedClients.size > 0) {
+        io.emit('metrics', metrics);
+      }
+    } catch (error) {
+      console.error('Error in metrics interval:', error);
+      // Broadcast error to connected clients
+      if (connectedClients.size > 0) {
+        io.emit('metricsError', {
+          message: 'Failed to collect system metrics',
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+  }, 1000);
+}
+
+function stopMetricsCollection() {
+  if (connectedClients.size === 0 && metricsInterval) {
+    clearInterval(metricsInterval);
+    metricsInterval = null;
+  }
+}
+
 // Socket.io connection
 io.on('connection', (socket) => {
   console.log('Client connected');
-  
+  connectedClients.add(socket.id);
+
+  // Start metrics collection on first client
+  if (connectedClients.size === 1) {
+    startMetricsCollection();
+  }
+
   // Send system info immediately
   socket.emit('systemInfo', systemInfo);
 
-  // Send metrics every second
-  const metricsInterval = setInterval(async () => {
-    const metrics = await collectMetrics();
-    if (metrics) {
-      socket.emit('metrics', metrics);
-    }
-  }, 1000);
-
   socket.on('disconnect', () => {
     console.log('Client disconnected');
-    clearInterval(metricsInterval);
+    connectedClients.delete(socket.id);
+
+    // Stop metrics collection when no clients connected
+    stopMetricsCollection();
   });
 });
 

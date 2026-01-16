@@ -20,8 +20,9 @@ function startTracking() {
     trackingData = [];
 
     // Update UI
-    document.getElementById('start-tracking').disabled = true;
-    document.getElementById('start-tracking').innerHTML = '<span>⏳</span> 추적 중...';
+    const button = document.getElementById('start-tracking');
+    button.disabled = true;
+    button.textContent = '⏳ 추적 중...';
     document.getElementById('tracking-status').classList.remove('hidden');
 
     // Update timer every second
@@ -71,8 +72,9 @@ function stopTracking() {
 
     // Update UI
     document.getElementById('tracking-status').classList.add('hidden');
-    document.getElementById('start-tracking').disabled = false;
-    document.getElementById('start-tracking').innerHTML = '<span>📊</span> 5분 추적 시작';
+    const button = document.getElementById('start-tracking');
+    button.disabled = false;
+    button.textContent = '📊 5분 추적 시작';
 
     console.log(`Tracking complete. Collected ${trackingData.length} data points.`);
 
@@ -82,8 +84,9 @@ function stopTracking() {
 
 // Generate PDF Report
 async function generatePDFReport() {
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF('p', 'mm', 'a4');
+    try {
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
 
     const pageWidth = 210;
     const pageHeight = 297;
@@ -377,11 +380,31 @@ async function generatePDFReport() {
     }
 
     // Open PDF in new browser tab instead of downloading
-    const pdfBlobUrl = pdf.output('bloburl');
-    window.open(pdfBlobUrl, '_blank');
+    try {
+        const pdfBlobUrl = pdf.output('bloburl');
+        const newWindow = window.open(pdfBlobUrl, '_blank');
 
-    console.log(`PDF report generated and opened in new tab`);
-    alert(`Report opened in new tab!`);
+        if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+            console.warn('Popup blocked - trying download instead');
+            pdf.save('system-monitoring-report.pdf');
+        }
+
+        console.log(`PDF report generated and opened in new tab`);
+    } catch (error) {
+        console.error('Error opening PDF:', error);
+        // Fallback to download
+        try {
+            pdf.save('system-monitoring-report.pdf');
+            console.log('PDF downloaded instead');
+        } catch (downloadError) {
+            console.error('Error downloading PDF:', downloadError);
+            alert('리포트 생성 중 오류가 발생했습니다.');
+        }
+    }
+    } catch (error) {
+        console.error('Error generating PDF report:', error);
+        alert('PDF 리포트 생성 중 오류가 발생했습니다. 콘솔을 확인해주세요.');
+    }
 }
 
 // Calculate statistics from tracking data

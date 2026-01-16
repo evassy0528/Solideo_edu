@@ -224,8 +224,10 @@ function initNetworkChart() {
 function initDiskChart(diskData) {
     const ctx = document.getElementById('disk-chart').getContext('2d');
 
-    if (diskChart) {
+    // Only destroy if chart exists and disk count changed
+    if (diskChart && diskChart.data.labels.length !== diskData.filter(d => d.size > 0).length) {
         diskChart.destroy();
+        diskChart = null;
     }
 
     const colors = [
@@ -252,48 +254,63 @@ function initDiskChart(diskData) {
             freeData.push(disk.available);
             bgColors.push(colors[index % colors.length]);
 
-            // Create legend item
+            // Create legend item safely (prevent XSS)
             const legendItem = document.createElement('div');
             legendItem.className = 'legend-item';
-            legendItem.innerHTML = `
-        <span class="legend-color" style="background: ${colors[index % colors.length]}"></span>
-        <span>${label}: ${disk.usedPercent}% (${formatBytes(disk.used)} / ${formatBytes(disk.size)})</span>
-      `;
+
+            const colorSpan = document.createElement('span');
+            colorSpan.className = 'legend-color';
+            colorSpan.style.background = colors[index % colors.length];
+
+            const textSpan = document.createElement('span');
+            textSpan.textContent = `${label}: ${disk.usedPercent}% (${formatBytes(disk.used)} / ${formatBytes(disk.size)})`;
+
+            legendItem.appendChild(colorSpan);
+            legendItem.appendChild(textSpan);
             legendContainer.appendChild(legendItem);
         }
     });
 
-    diskChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: usedData,
-                backgroundColor: bgColors,
-                borderColor: 'rgba(15, 15, 26, 0.8)',
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            cutout: '65%',
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: 'rgba(30, 30, 50, 0.9)',
-                    callbacks: {
-                        label: (ctx) => {
-                            const total = diskData[ctx.dataIndex].size;
-                            const used = ctx.raw;
-                            const percent = ((used / total) * 100).toFixed(1);
-                            return `${formatBytes(used)} used (${percent}%)`;
+    if (!diskChart) {
+        // Create chart only once
+        diskChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: usedData,
+                    backgroundColor: bgColors,
+                    borderColor: 'rgba(15, 15, 26, 0.8)',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                cutout: '65%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(30, 30, 50, 0.9)',
+                        callbacks: {
+                            label: (ctx) => {
+                                const total = diskData[ctx.dataIndex].size;
+                                const used = ctx.raw;
+                                const percent = ((used / total) * 100).toFixed(1);
+                                return `${formatBytes(used)} used (${percent}%)`;
+                            }
                         }
                     }
                 }
             }
-        }
-    });
+        });
+    } else {
+        // Update existing chart
+        diskChart.data.labels = labels;
+        diskChart.data.datasets[0].data = usedData;
+        diskChart.data.datasets[0].backgroundColor = bgColors;
+        diskChart.update('none');
+    }
 }
 
 // Update charts with new data
